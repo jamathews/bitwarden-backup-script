@@ -2,12 +2,6 @@
 
 Dieses Bash-Skript bietet eine einfache Möglichkeit, Backups von einem Bitwarden-Konto zu erstellen und zu konfigurieren.
 
-## Roadmap
-
-- Voraussetzungen abfragen (jq, bw)
-- Restore Funktionalilät einbauen
-- die Flags überschreiben die einstellung im config.json (attachments_option)
-
 ## Installation
 
 1. **Voraussetzungen:**
@@ -15,7 +9,6 @@ Dieses Bash-Skript bietet eine einfache Möglichkeit, Backups von einem Bitwarde
    - OpenSSL
    - jq (JSON Query Tool)
    - bitwarden-cli (bw)
-   - 7za
    - Zip
    - GPG (optional zur Verschlüsslung)
 
@@ -25,32 +18,16 @@ Dieses Bash-Skript bietet eine einfache Möglichkeit, Backups von einem Bitwarde
 
      ```bash
      sudo apt-get update
-     sudo apt-get install bash openssl jq
+     sudo apt-get install bash openssl jq zip gpg
      ```
-
-   - Unter CentOS/RHEL:
-
-     ```bash
-     sudo yum install bash openssl jq
-     ```
-
-   - Unter macOS (mit Homebrew):
-
-     ```bash
-     brew install bash openssl jq
-     ```
-
-   - Unter Windows:
-
-     - Installiere [Git Bash](https://gitforwindows.org/) für Bash.
-     - Installiere OpenSSL: [Win64 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html)
-     - Installiere [jq](https://stedolan.github.io/jq/download/).
+  
+  - (bitwarden-cli)[https://bitwarden.com/de-DE/help/cli/#tab-nativ-ausf%C3%BChrbar-bI3gMs3A3z4pl0fwvRie9] installieren 
 
 3. **Skript herunterladen:**
 
    ```bash
-   curl -O https://example.com/path/to/bash-programm.sh
-   chmod +x bash-programm.sh
+   curl -O https://gitlab.com/silkeackermann/bitwarden-backup-script/-/blob/main/bitwarden-backup-script.sh
+   chmod +x bitwarden-backup-script.sh
 
 ## Verwendung
 
@@ -74,20 +51,16 @@ Global:
 ## Tutorial
 
 ### Backup erstellen
-1. Führe das Backup aus:
 
 ```bash
 ./bash-programm.sh backup -c myconfig.json -o backup.tar.gz
 ```
-2. Gib die erforderlichen Informationen ein, wenn du dazu aufgefordert wirst.
 
 ### Konfigurationsdatei generieren
-1. Generiere eine Konfigurationsdatei:
 
 ```bash
 ./bash-programm.sh generate -c myconfig.json
 ```
-2. Beantworte die Fragen im interaktiven Dialog.
 
 
 
