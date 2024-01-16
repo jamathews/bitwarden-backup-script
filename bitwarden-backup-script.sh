@@ -16,7 +16,6 @@ temp_dir=".bw_backup"
 attachments=false
 config_file="config.json"
 output_file="bitwarden_backup_$(date +"%d_%m_%Y_%H_%M")"
-quiet=false
 
 # Funktion für die Anzeige der Hilfe
 show_help() {
@@ -117,7 +116,6 @@ debug_global_options() {
   log "Attachments option: $attachments"
   log "Config file option: $config_file"
   log "Ouput file option: $output_file"
-  log "Quiet option: $quiet"
   log "-------------------------------"
   log
 }
@@ -147,14 +145,13 @@ export_data() {
   local organization_id="$4"
   local organization_name="$5"
 
-  debug_global_options
-
+  
   # Login in Bitwarden Tresor
-  key=$(bw login "$email" "$password" --raw)
+  key=$(bw login "$email" "$password" --raw )
   export BW_SESSION="$key"
 
   # Prüfen ob Login erfolgreich
-  if bw login --check > /dev/null 2>&1; then
+  if bw login --check  > /dev/null 2>&1; then
     if [ -n "$organization_id" ]; then
       log "Logged on $server with $email as Organization."
     else
@@ -173,8 +170,8 @@ export_data() {
   fi
 
   # Export des Tresors
-  bw export $password --output "$export_dir/bitwarden.json" --format json "${organization_id:+ --organizationid $organization_id}"
-  bw export $password --output "$export_dir/bitwarden.csv" --format csv "${organization_id:+ --organizationid $organization_id}"
+  bw export $password --output "$export_dir/bitwarden.json" --format json "${organization_id:+ --organizationid $organization_id}" 
+  bw export $password --output "$export_dir/bitwarden.csv" --format csv "${organization_id:+ --organizationid $organization_id}" 
 
   # Erstelle das Verzeichnis für den Export von Anhängen
   if [ "$attachments" = "true" ]; then
@@ -183,7 +180,6 @@ export_data() {
 
     # Anhänge herunterladen
     bash <(bw list items --organizationid "${organization_id:-null}" | jq -r '.[] | select(.attachments != null) | . as $parent | .attachments[] | "bw get attachment \(.id) --itemid \($parent.id) --output \"'$export_dir'/attachments/\($parent.id)/\(.fileName)\""')
-    #bw list items --organizationid "${organization_id:-null}" | jq -r '.[] | select(.attachments != null) | . as $parent | .attachments[] | "bw get attachment \(.id) --itemid \($parent.id) --output \"$export_dir/attachments/\($parent.id)/\(.fileName)\"" | bash'
 
   fi
 
@@ -202,8 +198,6 @@ backup_command() {
     bw logout
     log "Logged out from Bitwarden."
   fi
-
-  debug_global_options
 
   # Prüfe, ob die Konfigurationsdatei existiert
   if [ ! -e "$config_file" ]; then
@@ -224,7 +218,8 @@ backup_command() {
   accounts=($(jq -c '.accounts[]' "$config_file"))
 
   # Prüfe, ob die encryption-passphrase korrekt ist
-  read -p "Enter decryption passphrase for backup: " passphrase
+  read -p "Enter decryption passphrase for backup: " -s passphrase
+  echo
 
   # Prüfe, ob die encryption-passphrase korrekt ist
   if [[ $(decrypt_password "$encryption_passphrase" "$passphrase") != "$passphrase" ]]; then
@@ -246,19 +241,22 @@ backup_command() {
 
   # Loop über Accounts und rufe export_data für jeden auf
   for account in "${accounts[@]}"; do
-      email=$(jq -r '.email' <<< "$account")
-      password_hash=$(jq -r '.password' <<< "$account")
-      password=$(decrypt_password "$password_hash" "$passphrase")
-      organisation=$(jq -r '.organisation' <<< "$account")
- 
-      if [ "$organisation" == "true" ]; then
-          organisation_id=$(jq -r '.organisation_id' <<< "$account")
-          organisation_name=$(jq -r '.organisation_name' <<< "$account")
-          export_data "$bitwarden_server" "$email" "$password" "$organisation_id" "$organisation_name"
-      else
-          export_data "$bitwarden_server" "$email" "$password"
-      fi
+    # Benutzerdaten extrahieren
+    email=$(jq -r '.email' <<< "$account")
+    password_hash=$(jq -r '.password' <<< "$account")
+    password=$(decrypt_password "$password_hash" "$passphrase")
+
+    # Organisation prüfen
+    if [ "$(jq -r '.organisation' <<< "$account")" == "true" ]; then
+        # Organisation-Details extrahieren
+        organisation_id=$(jq -r '.organisation_id' <<< "$account")
+        organisation_name=$(jq -r '.organisation_name' <<< "$account")
+    fi
+
+    # Daten exportieren
+    export_data "$bitwarden_server" "$email" "$password" "$organisation_id" "$organisation_name"
   done
+
 
   # Benutzer nach der Verschlüsselung der ZIP-Datei mit GPG fragen
   read -p "Möchten Sie die ZIP-Datei mit GPG verschlüsseln? (Y/n): " encrypt_with_gpg
@@ -280,7 +278,7 @@ backup_command() {
     log "Encryption completed. Encrypted file: $output_file.tar.gz.gpg"
   else
     log "Creating the ZIP archive..."
-    tar czpf "$temp_dir" "$output_file.tar.gz"
+    tar czpf "$output_file.tar.gz" "$temp_dir"
     log "ZIP archive created. File: $output_file.tar.gz"
   fi
 
@@ -291,7 +289,7 @@ generate_command() {
 
     # Funktion zum interaktiven Erstellen der config.json-Datei
     create_config_file() {
-      log "Generating config.json..."
+      log "Generating $config_file..."
 
       read -p "Add attachments to the backup? (true/false): " -r attachments
       attachments="${attachments:-true}"  # Wenn attachments leer ist, setze den Standardwert
@@ -314,37 +312,43 @@ generate_command() {
       accounts=()
 
       while true; do
-          read -p "Enter email address (leave empty to finish): " -r email
-          if [ -z "$email" ]; then
-              break
-          fi
+      
+        read -p "Enter email address: " -r email
+        read -p "Enter password: " -s password
+        echo
 
-          read -p "Enter password: " -s password
-          echo
+        # Verschlüsselung und Hashing des Passworts
+        encrypted_password=$(encrypt_password "$password" "$encryption_passphrase")
+        accounts+=("{\"email\":\"$email\",\"password\":\"$encrypted_password\"")
 
-          # Verschlüsselung und Hashing des Passworts
-          encrypted_password=$(encrypt_password "$password" "$encryption_passphrase")
+        read -p "Is this account part of an organization? (true/false): " -r organisation
+        organisation="${organisation:-false}" # Wenn organisation leer ist, setzte den Standardwert
 
-          read -p "Is this account part of an organization? (true/false): " -r organisation
-          organisation="${organisation:-false}" #Wenn organisation leer ist, setzte den Standardwert
+        # Wenn das Konto Teil einer Organisation ist, zusätzliche Informationen abfragen
+        if [ "$organisation" == "true" ]; then
+            read -p "Enter organization ID: " -r organisation_id
+            read -p "Enter organization name: " -r organisation_name
+        fi
 
-          # Wenn das Konto Teil einer Organisation ist, zusätzliche Informationen abfragen
-          if [ "$organisation" == "true" ]; then
-              read -p "Enter organization ID: " -r organisation_id
-              read -p "Enter organization name: " -r organisation_name
-          fi
+        # Konto zur Liste hinzufügen
+        accounts+=(",\"organisation\":$organisation")
+        
+        # Wenn das Konto Teil einer Organisation ist, füge zusätzliche Informationen hinzu
+        if [ "$organisation" == "true" ]; then
+            accounts+=(",\"organisation_id\":\"$organisation_id\",\"organisation_name\":\"$organisation_name\"")
+        fi
 
-          # Konto zur Liste hinzufügen
-          accounts+=("{\"email\":\"$email\",\"password\":\"$encrypted_password\",\"organisation\":$organisation")
-          
-          # Wenn das Konto Teil einer Organisation ist, füge zusätzliche Informationen hinzu
-          if [ "$organisation" == "true" ]; then
-              accounts+=(",\"organisation_id\":\"$organisation_id\",\"organisation_name\":\"$organisation_name\"")
-          fi
+        accounts+=("},")
 
-          accounts+=("},")
+        log "Account added."
 
-          log "Account added."
+        # Frage den Benutzer, ob er einen weiteren Account hinzufügen möchte
+        read -p "Do you want to add another account? (Y/n): " -r add_another
+        add_another="${add_another:-Y}" # Wenn add_another leer ist, setzte den Standardwert
+
+        if [ "$add_another" == "${add_another#[YyjJ]}" ]; then
+            break
+        fi
       done
 
       # Überprüfe, ob das Array accounts nicht leer ist
@@ -374,8 +378,8 @@ generate_command() {
 
     # Überprüfe, ob die Konfigurationsdatei bereits existiert
     if [ -e "$config_file" ]; then
-        read -p "Configuration file already exists. Do you want to overwrite it? (y/n): " overwrite
-        if [ "$overwrite" != "y" ]; then
+        read -p "Configuration file already exists. Do you want to overwrite it? (y/N): " overwrite
+        if [ "$overwrite" == "${overwrite#[YyjJ]}" ]; then
             log "Aborted. No changes made."
             exit 0
         fi
@@ -461,8 +465,3 @@ esac
 
 #echo "Programm wurde erfolgreich ausgeführt"
 exit 0
-
-# Ausgabe der verarbeiteten Optionen
-#echo "Subcommand: $subcommand"
-#echo "Attachments: $attachments"
-#echo "Config file: $config_file"

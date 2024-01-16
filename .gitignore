@@ -2,3 +2,4 @@ config*.json
 TODO.md
 *.tar.gz.gpg
 *.tar.gz
+.bw_backup/
