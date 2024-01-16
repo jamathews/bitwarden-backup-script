@@ -274,7 +274,7 @@ backup_command() {
     fi
 
     log "Encrypting the ZIP file with GPG..."
-    tar cz "$temp_dir" | gpg --symmetric -o "$output_file.tar.gz.gpg"
+    tar cz "$temp_dir" | gpg --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
     log "Encryption completed. Encrypted file: $output_file.tar.gz.gpg"
   else
     log "Creating the ZIP archive..."
