@@ -1,2 +1,4 @@
 config*.json
 TODO.md
+*.tar.gz.gpg
+*.tar.gz

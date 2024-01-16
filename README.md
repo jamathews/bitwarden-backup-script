@@ -9,7 +9,7 @@ Dieses Bash-Skript bietet eine einfache Möglichkeit, Backups von einem Bitwarde
    - OpenSSL
    - jq (JSON Query Tool)
    - [bitwarden-cli](https://bitwarden.com/de-DE/help/cli/#tab-nativ-ausf%C3%BChrbar-bI3gMs3A3z4pl0fwvRie9)
-   - Zip
+   - tar
    - GPG (optional zur Verschlüsslung)
 
 2. **Installiere die Abhängigkeiten:**

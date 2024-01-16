@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Globale Farbvariablen
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+GREY='\033[0;90m'
+NC='\033[0m'  # ANSI Escape Code zum Zurücksetzen der Farbe
+
 # Speichere den absoluten Pfad des Skripts
 script_path=$(realpath "$0")
 temp_dir=".bw_backup"
@@ -44,15 +52,43 @@ on_exit() {
     if test $logged_in -eq 0
     then    
         bw logout
-        echo "Logged out from Bitwarden."
+        log "Logged out from Bitwarden."
     fi
 
     # Überprüfen, ob der temporäre Ordner existiert, bevor er gelöscht wird
     if [ -d "$temp_dir" ]; then
-        rm -rf "$temp_dir" && echo "Temporary files cleaned up successfully."
+        rm -rf "$temp_dir" && log "Temporary files cleaned up successfully."
     fi
 
     exit $exit_code
+}
+
+# Funktion zur Überprüfung von Abhängigkeiten
+check_dependencies() {
+  # Überprüfe, ob jq installiert ist
+  if ! command -v jq &> /dev/null; then
+    echo -e "${RED}Error: jq is not installed. Please install jq to proceed.${NC}"
+    exit 1
+  fi
+
+  # Überprüfe, ob gpg installiert ist (optional)
+  if command -v gpg &> /dev/null; then
+    log "${GREEN}GPG is installed. Encryption feature is available.${NC}"
+  else
+    echo -e "${YELLOW}Warning: GPG is not installed. Encryption feature will be disabled.${NC}"
+  fi
+
+  # Überprüfe, ob bw (Bitwarden CLI) installiert ist
+  if ! command -v bw &> /dev/null; then
+    echo -e "${RED}Error: Bitwarden CLI (bw) is not installed. Please install bw to proceed.${NC}"
+    exit 1
+  fi
+
+  # Überprüfe, ob openssl installiert ist
+  if ! command -v openssl &> /dev/null; then
+    echo -e "${RED}Error: openssl is not installed. Please install openssl to proceed.${NC}"
+    exit 1
+  fi
 }
 
 # Funktion zum Überprüfen der Passworteingabe
@@ -71,19 +107,19 @@ log() {
     if [ "$quiet" = true ]; then
         return 0  # Quiet-Modus aktiviert, keine Ausgabe
     else
-        echo "$@"
+        echo -e "$@"
     fi
 }
 
 debug_global_options() {
   # Hier kommt die spezifische Logik für das 'backup'-Subcommand
-  echo "Executing export_data command"
-  echo "Attachments option: $attachments"
-  echo "Config file option: $config_file"
-  echo "Ouput file option: $output_file"
-  echo "Quiet option: $quiet"
-  echo "-------------------------------"
-  echo
+  log "Executing export_data command"
+  log "Attachments option: $attachments"
+  log "Config file option: $config_file"
+  log "Ouput file option: $output_file"
+  log "Quiet option: $quiet"
+  log "-------------------------------"
+  log
 }
 
 # Funktion zum Verschlüsseln eines Passworts und Erstellen des Hashes
@@ -120,12 +156,12 @@ export_data() {
   # Prüfen ob Login erfolgreich
   if bw login --check > /dev/null 2>&1; then
     if [ -n "$organization_id" ]; then
-      echo "Logged on $server with $email as Organization."
+      log "Logged on $server with $email as Organization."
     else
-      echo "Logged in on $server with $email."
+      log "Logged in on $server with $email."
     fi
   else
-    echo "Login failed. Exiting."
+    log "Login failed. Exiting."
     exit 1
   fi
 
@@ -164,14 +200,20 @@ backup_command() {
   if test $logged_in -eq 0; then
     # Benutzer ist eingeloggt, führe Logout durch
     bw logout
-    echo "Logged out from Bitwarden."
+    log "Logged out from Bitwarden."
   fi
 
   debug_global_options
 
   # Prüfe, ob die Konfigurationsdatei existiert
   if [ ! -e "$config_file" ]; then
-    echo "Error: Configuration file not found: $config_file"
+    echo -e "${RED}Error: Configuration file not found: $config_file${NC}"
+    exit 1
+  fi
+
+  # Überprüfen, ob die JSON-Datei gültig ist
+  if ! jq empty < "$config_file" &> /dev/null; then
+    echo -e "${RED}Error: The JSON file '$config_file' is not valid.${NC}"
     exit 1
   fi
 
@@ -182,8 +224,7 @@ backup_command() {
   accounts=($(jq -c '.accounts[]' "$config_file"))
 
   # Prüfe, ob die encryption-passphrase korrekt ist
-  echo "Enter decryption passphrase for backup:"
-  read -s passphrase
+  read -p "Enter decryption passphrase for backup: " passphrase
 
   # Prüfe, ob die encryption-passphrase korrekt ist
   if [[ $(decrypt_password "$encryption_passphrase" "$passphrase") != "$passphrase" ]]; then
@@ -194,13 +235,11 @@ backup_command() {
   # Überprüfe, ob der temporäre Ordner existiert
   if [ ! -d "$temp_dir" ]; then
       # Erstelle den Ordner, falls er nicht existiert
-      mkdir -p "$temp_dir" && echo "Temporary folder created successfully."
+      mkdir -p "$temp_dir" && log "Temporary folder created successfully."
   else
       # Lösche den Inhalt, falls der Ordner bereits existiert
-      rm -rf "$temp_dir"/* && echo "Cleared existing content in the temporary folder."
+      rm -rf "$temp_dir"/* && log "Cleared existing content in the temporary folder."
   fi
-
-  #TODO prüfen ob config File korrektes json
 
   # Konfiguriere Bitwarden mit dem ausgelesenen Server
   bw config server "$bitwarden_server"
@@ -221,37 +260,29 @@ backup_command() {
       fi
   done
 
-  # Beispiel: Füge hier den Code für das Backup hinzu
+  # Benutzer nach der Verschlüsselung der ZIP-Datei mit GPG fragen
+  read -p "Möchten Sie die ZIP-Datei mit GPG verschlüsseln? (Y/n): " encrypt_with_gpg
 
-  # Archiv erstellen und direkt verschlüsseln
-  #tar -cpf "archiv.tar" $temp_dir
-  cd $temp_dir
-  zip -r "$output_file.zip" *
+  # Standardwert für die Verschlüsselung auf "Y" setzen, wenn keine Eingabe erfolgt
+  encrypt_with_gpg="${encrypt_with_gpg:-Y}"
 
-  # Frage den Benutzer, ob er die Zip-Datei mit GPG verschlüsseln möchte
-  # read -p "Do you want to encrypt the ZIP file with GPG? (yes/no): " encrypt_with_gpg
-  # encrypt_with_gpg="${encrypt_with_gpg:-yes}"  # Wenn encrypt_with_gpg leer ist, setze den Standardwert
+  # Überprüfen, ob die Eingabe mit "Y" oder "y" beginnt (unabhängig von Groß- und Kleinschreibung)
+  if [ "$encrypt_with_gpg" != "${encrypt_with_gpg#[YyjJ]}" ]; then
 
-  # case "$encrypt_with_gpg" in
-  #     [yY]|[yY][eE][sS])
-  #         # Benutzer möchte die Zip-Datei mit GPG verschlüsseln
-  #         # read -s -p "Enter GPG passphrase: " gpg_passphrase
-  #         # echo
+    # Überprüfen, ob GPG installiert ist
+    if ! command -v gpg &> /dev/null; then
+      echo "Error: GPG is not installed. Please install GPG to proceed."
+      exit 1
+    fi
 
-  #         # Füge hier den Code zum Verschlüsseln der Zip-Datei mit GPG hinzu
-  #         zip_file="$output_file.zip"
-  #         tar -cpf - $temp_dir | 7za a -si -t7z -m0=lzma2 -mx=6 -mfb=64 -md=32m -ms=on -mhe=on -so | gpg --symmetric --cipher-algo AES256 --output "$zip_file.gpg"
-
-  #         echo "ZIP file encrypted with GPG: $zip_file.gpg"
-  #         ;;
-  #     *)
-  #         # Benutzer möchte die Zip-Datei nicht mit GPG verschlüsseln
-  #         zip_file="$output_file.zip"
-  #         tar -cpf - $temp_dir | 7za a -si -t7z -m0=lzma2 -mx=6 -mfb=64 -md=32m -ms=on -mhe=on -bd "$zip_file"
-
-  #         echo "ZIP file created: $zip_file"
-  #         ;;
-  # esac
+    log "Encrypting the ZIP file with GPG..."
+    tar cz "$temp_dir" | gpg --symmetric -o "$output_file.tar.gz.gpg"
+    log "Encryption completed. Encrypted file: $output_file.tar.gz.gpg"
+  else
+    log "Creating the ZIP archive..."
+    tar czpf "$temp_dir" "$output_file.tar.gz"
+    log "ZIP archive created. File: $output_file.tar.gz"
+  fi
 
 }
 
@@ -260,7 +291,7 @@ generate_command() {
 
     # Funktion zum interaktiven Erstellen der config.json-Datei
     create_config_file() {
-      echo "Generating config.json..."
+      log "Generating config.json..."
 
       read -p "Add attachments to the backup? (true/false): " -r attachments
       attachments="${attachments:-true}"  # Wenn attachments leer ist, setze den Standardwert
@@ -313,7 +344,7 @@ generate_command() {
 
           accounts+=("},")
 
-          echo "Account added."
+          log "Account added."
       done
 
       # Überprüfe, ob das Array accounts nicht leer ist
@@ -330,7 +361,7 @@ generate_command() {
 
       # Erstelle die config.json-Datei  
       echo "{\"attachments\":$attachments,\"url\":\"$url\",\"passphrase\":\"$encrypted_password_hash\",\"accounts\":[${accounts[@]}]}" > "$config_file"
-      echo "config.json file created: $config_file"
+      log "config.json file created: $config_file"
   }
 
 
@@ -345,7 +376,7 @@ generate_command() {
     if [ -e "$config_file" ]; then
         read -p "Configuration file already exists. Do you want to overwrite it? (y/n): " overwrite
         if [ "$overwrite" != "y" ]; then
-            echo "Aborted. No changes made."
+            log "Aborted. No changes made."
             exit 0
         fi
     fi
@@ -411,6 +442,9 @@ if [[ -z "$subcommand" ]]; then
   show_help
   exit 1
 fi
+
+# Prüfen ob alle notwendigen Abhängigkeiten installiert sind
+check_dependencies
 
 # Programmlogik ausführen je nach Subcommand
 case "$subcommand" in
