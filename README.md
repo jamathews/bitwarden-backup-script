@@ -8,7 +8,7 @@ This bash script provides an easy way to create and configure backups from a Bit
    - Bash (UNIX Shell)
    - OpenSSL
    - jq (JSON Query Tool)
-   - [bitwarden-cli](https://bitwarden.com/help/cli/#tab-nativ-ausf%C3%BChrbar-bI3gMs3A3z4pl0fwvRie9)
+   - [bitwarden-cli](https://bitwarden.com/help/cli/#tab-native-executable-bI3gMs3A3z4pl0fwvRie9)
    - tar
    - gpg (Optional for encryption)
 
