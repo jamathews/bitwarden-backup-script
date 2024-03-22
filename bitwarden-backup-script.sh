@@ -1,23 +1,23 @@
 #!/bin/bash
 
-# Globale Farbvariablen
+# Global color variables
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
 GREY='\033[0;90m'
-NC='\033[0m'  # ANSI Escape Code zum Zurücksetzen der Farbe
+NC='\033[0m'  # ANSI Escape Code to reset color
 
-# Speichere den absoluten Pfad des Skripts
+# Store the absolute path of the script
 script_path=$(realpath "$0")
 temp_dir=".bw_backup"
 
-# Standardwerte für Optionen
+# Default values for options
 attachments=false
 config_file="config.json"
 output_file="bitwarden_backup_$(date +"%d_%m_%Y_%H_%M")"
 
-# Funktion für die Anzeige der Hilfe
+# Function to display help
 show_help() {
   cat << EOT
   Version: 0.1
@@ -41,7 +41,7 @@ show_help() {
 EOT
 }
 
-# Bitwarden Logout beim Beenden des Skripts, falls angemeldet.
+# Bitwarden Logout on exit if logged in
 on_exit() {
     local exit_code=$?
 
@@ -54,7 +54,7 @@ on_exit() {
         log "Logged out from Bitwarden."
     fi
 
-    # Überprüfen, ob der temporäre Ordner existiert, bevor er gelöscht wird
+    # Check if the temporary folder exists before deleting
     if [ -d "$temp_dir" ]; then
         rm -rf "$temp_dir" && log "Temporary files cleaned up successfully."
     fi
@@ -62,35 +62,35 @@ on_exit() {
     exit $exit_code
 }
 
-# Funktion zur Überprüfung von Abhängigkeiten
+# Function to check dependencies
 check_dependencies() {
-  # Überprüfe, ob jq installiert ist
+  # Check if jq is installed
   if ! command -v jq &> /dev/null; then
     echo -e "${RED}Error: jq is not installed. Please install jq to proceed.${NC}"
     exit 1
   fi
 
-  # Überprüfe, ob gpg installiert ist (optional)
+  # Check if gpg is installed (optional)
   if command -v gpg &> /dev/null; then
     log "${GREEN}GPG is installed. Encryption feature is available.${NC}"
   else
     echo -e "${YELLOW}Warning: GPG is not installed. Encryption feature will be disabled.${NC}"
   fi
 
-  # Überprüfe, ob bw (Bitwarden CLI) installiert ist
+  # Check if bw (Bitwarden CLI) is installed
   if ! command -v bw &> /dev/null; then
     echo -e "${RED}Error: Bitwarden CLI (bw) is not installed. Please install bw to proceed.${NC}"
     exit 1
   fi
 
-  # Überprüfe, ob openssl installiert ist
+  # Check if openssl is installed
   if ! command -v openssl &> /dev/null; then
     echo -e "${RED}Error: openssl is not installed. Please install openssl to proceed.${NC}"
     exit 1
   fi
 }
 
-# Funktion zum Überprüfen der Passworteingabe
+# Function to check password input
 check_password_match() {
   local pass1="$1"
   local pass2="$2"
@@ -101,17 +101,16 @@ check_password_match() {
   fi
 }
 
-# Funktion, die den echo-Befehl ersetzt und bei Bedarf keine Ausgaben macht
+# Function replacing the echo command and making no output if required
 log() {
     if [ "$quiet" = true ]; then
-        return 0  # Quiet-Modus aktiviert, keine Ausgabe
+        return 0  # Quiet mode activated, no output
     else
         echo -e "$@"
     fi
 }
 
 debug_global_options() {
-  # Hier kommt die spezifische Logik für das 'backup'-Subcommand
   log "Executing export_data command"
   log "Attachments option: $attachments"
   log "Config file option: $config_file"
@@ -120,7 +119,7 @@ debug_global_options() {
   log
 }
 
-# Funktion zum Verschlüsseln eines Passworts und Erstellen des Hashes
+# Function to encrypt a password and create the hash
 encrypt_password() {
     local password="$1"
     local passphrase="$2"
@@ -130,7 +129,7 @@ encrypt_password() {
     echo -n "$encrypted_password"
 }
 
-# Funktion zum Entschlüsseln eines verschlüsselten Passworts
+# Function to decrypt an encrypted password
 decrypt_password() {
     local encrypted_password="$1"
     local passphrase="$2"
@@ -146,11 +145,11 @@ export_data() {
   local organization_name="$5"
 
   
-  # Login in Bitwarden Tresor
+  # Login to Bitwarden vault
   key=$(bw login "$email" "$password" --raw )
   export BW_SESSION="$key"
 
-  # Prüfen ob Login erfolgreich
+  # Check if login is successful
   if bw login --check  > /dev/null 2>&1; then
     if [ -n "$organization_id" ]; then
       log "Logged on $server with $email as Organization."
@@ -162,23 +161,23 @@ export_data() {
     exit 1
   fi
 
-  # Bestimme den Dateinamen für den Export
+  # Determine the filename for export
   if [ -n "$organization_id" ]; then
     export_dir="./$temp_dir/${email}_orga_${organization_name}"
   else
     export_dir="./$temp_dir/$email"
   fi
 
-  # Export des Tresors
+  # Export the vault
   bw export $password --output "$export_dir/bitwarden.json" --format json "${organization_id:+ --organizationid $organization_id}" 
   bw export $password --output "$export_dir/bitwarden.csv" --format csv "${organization_id:+ --organizationid $organization_id}" 
 
-  # Erstelle das Verzeichnis für den Export von Anhängen
+  # Create directory for attachments export
   if [ "$attachments" = "true" ]; then
-    # Ordner für die Anhänge erstellen
+    # Create directory for attachments
     mkdir -p "$export_dir/attachments"
 
-    # Anhänge herunterladen
+    # Download attachments
     bash <(bw list items --organizationid "${organization_id:-null}" | jq -r '.[] | select(.attachments != null) | . as $parent | .attachments[] | "bw get attachment \(.id) --itemid \($parent.id) --output \"'$export_dir'/attachments/\($parent.id)/\(.fileName)\""')
 
   fi
@@ -186,88 +185,87 @@ export_data() {
   bw logout
 }
 
-# Funktion für das Backup-Subcommand
+# Function for the backup subcommand
 backup_command() {
 
-  # Überprüfe, ob der Benutzer bei Bitwarden eingeloggt ist
+  # Check if the user is logged in to Bitwarden
   bw login --check > /dev/null 2>&1
   logged_in=$?
 
   if test $logged_in -eq 0; then
-    # Benutzer ist eingeloggt, führe Logout durch
+    # User is logged in, perform logout
     bw logout
     log "Logged out from Bitwarden."
   fi
 
-  # Prüfe, ob die Konfigurationsdatei existiert
+  # Check if the configuration file exists
   if [ ! -e "$config_file" ]; then
     echo -e "${RED}Error: Configuration file not found: $config_file${NC}"
     exit 1
   fi
 
-  # Überprüfen, ob die JSON-Datei gültig ist
+  # Check if the JSON file is valid
   if ! jq empty < "$config_file" &> /dev/null; then
     echo -e "${RED}Error: The JSON file '$config_file' is not valid.${NC}"
     exit 1
   fi
 
-  # Lese die Daten aus der Konfigurationsdatei
+  # Read data from the configuration file
   attachments=$(jq -r '.attachments' "$config_file")
   encryption_passphrase=$(jq -r '.passphrase' "$config_file")
   bitwarden_server=$(jq -r '.url' "$config_file")
   accounts=($(jq -c '.accounts[]' "$config_file"))
 
-  # Prüfe, ob die encryption-passphrase korrekt ist
+  # Check if the encryption passphrase is correct
   read -p "Enter decryption passphrase for backup: " -s passphrase
   echo
 
-  # Prüfe, ob die encryption-passphrase korrekt ist
   if [[ $(decrypt_password "$encryption_passphrase" "$passphrase") != "$passphrase" ]]; then
       echo "Incorrect passphrase. Exiting."
       exit 1
   fi
 
-  # Überprüfe, ob der temporäre Ordner existiert
+  # Check if the temporary folder exists
   if [ ! -d "$temp_dir" ]; then
-      # Erstelle den Ordner, falls er nicht existiert
+      # Create the folder if it doesn't exist
       mkdir -p "$temp_dir" && log "Temporary folder created successfully."
   else
-      # Lösche den Inhalt, falls der Ordner bereits existiert
+      # Clear the existing content if the folder already exists
       rm -rf "$temp_dir"/* && log "Cleared existing content in the temporary folder."
   fi
 
-  # Konfiguriere Bitwarden mit dem ausgelesenen Server
+  # Configure Bitwarden with the extracted server
   bw config server "$bitwarden_server"
 
-  # Loop über Accounts und rufe export_data für jeden auf
+  # Loop over accounts and call export_data for each
   for account in "${accounts[@]}"; do
-    # Benutzerdaten extrahieren
+    # Extract user data
     email=$(jq -r '.email' <<< "$account")
     password_hash=$(jq -r '.password' <<< "$account")
     password=$(decrypt_password "$password_hash" "$passphrase")
 
-    # Organisation prüfen
+    # Check for organization
     if [ "$(jq -r '.organisation' <<< "$account")" == "true" ]; then
         # Organisation-Details extrahieren
         organisation_id=$(jq -r '.organisation_id' <<< "$account")
         organisation_name=$(jq -r '.organisation_name' <<< "$account")
     fi
 
-    # Daten exportieren
+    # Export data
     export_data "$bitwarden_server" "$email" "$password" "$organisation_id" "$organisation_name"
   done
 
 
-  # Benutzer nach der Verschlüsselung der ZIP-Datei mit GPG fragen
-  read -p "Möchten Sie die ZIP-Datei mit GPG verschlüsseln? (Y/n): " encrypt_with_gpg
+  # Ask user whether to encrypt the ZIP file with GPG
+  read -p "Do you want to encrypt the ZIP file with GPG? (Y/n): " encrypt_with_gpg
 
-  # Standardwert für die Verschlüsselung auf "Y" setzen, wenn keine Eingabe erfolgt
+  # Set default value for encryption to "Y" if no input is provided
   encrypt_with_gpg="${encrypt_with_gpg:-Y}"
 
-  # Überprüfen, ob die Eingabe mit "Y" oder "y" beginnt (unabhängig von Groß- und Kleinschreibung)
+  # Check if the input starts with "Y" or "y" (case-insensitive)
   if [ "$encrypt_with_gpg" != "${encrypt_with_gpg#[YyjJ]}" ]; then
 
-    # Überprüfen, ob GPG installiert ist
+    # Check if GPG is installed
     if ! command -v gpg &> /dev/null; then
       echo "Error: GPG is not installed. Please install GPG to proceed."
       exit 1
@@ -284,31 +282,31 @@ backup_command() {
 
 }
 
-# Funktion für das Generate-Subcommand
+# Function for the generate subcommand
 generate_command() {
 
-    # Funktion zum interaktiven Erstellen der config.json-Datei
+    # Function for interactively creating the config.json file
     create_config_file() {
       log "Generating $config_file..."
 
       read -p "Add attachments to the backup? (true/false): " -r attachments
-      attachments="${attachments:-true}"  # Wenn attachments leer ist, setze den Standardwert
+      attachments="${attachments:-true}"  # Set default value if attachments is empty
 
       read -p "Enter Bitwarden URL (default: https://vault.bitwarden.com): " -r url
-      url="${url:-https://vault.bitwarden.com}"  # Wenn url leer ist, setze den Standardwert
+      url="${url:-https://vault.bitwarden.com}"   # Set default value if url is empty
 
       read -p "Enter encryption passphrase for password encryption: " -s encryption_passphrase
       echo
       read -p "Confirm encryption passphrase: " -s confirm_passphrase
       echo
 
-      # Überprüfe, ob die Passwörter übereinstimmen
+      # Check if passwords match
       check_password_match "$encryption_passphrase" "$confirm_passphrase"
 
-      # Verschlüsselung und Hashing des Passworts
+      # Encryption and hashing of the password
       encrypted_password_hash=$(encrypt_password "$encryption_passphrase" "$encryption_passphrase")
 
-      # Array für Benutzerkonten
+      # Array for user accounts
       accounts=()
 
       while true; do
@@ -317,23 +315,23 @@ generate_command() {
         read -p "Enter password: " -s password
         echo
 
-        # Verschlüsselung und Hashing des Passworts
+        # Encryption and hashing of the password
         encrypted_password=$(encrypt_password "$password" "$encryption_passphrase")
         accounts+=("{\"email\":\"$email\",\"password\":\"$encrypted_password\"")
 
         read -p "Is this account part of an organization? (true/false): " -r organisation
-        organisation="${organisation:-false}" # Wenn organisation leer ist, setzte den Standardwert
+        organisation="${organisation:-false}" # Set default value if organisation is empty
 
-        # Wenn das Konto Teil einer Organisation ist, zusätzliche Informationen abfragen
+        # If the account is part of an organization, prompt for additional information
         if [ "$organisation" == "true" ]; then
             read -p "Enter organization ID: " -r organisation_id
             read -p "Enter organization name: " -r organisation_name
         fi
 
-        # Konto zur Liste hinzufügen
+        # Add account to the list
         accounts+=(",\"organisation\":$organisation")
         
-        # Wenn das Konto Teil einer Organisation ist, füge zusätzliche Informationen hinzu
+        # If the account is part of an organization, add additional information
         if [ "$organisation" == "true" ]; then
             accounts+=(",\"organisation_id\":\"$organisation_id\",\"organisation_name\":\"$organisation_name\"")
         fi
@@ -342,41 +340,41 @@ generate_command() {
 
         log "Account added."
 
-        # Frage den Benutzer, ob er einen weiteren Account hinzufügen möchte
+        # Ask the user if they want to add another account
         read -p "Do you want to add another account? (Y/n): " -r add_another
-        add_another="${add_another:-Y}" # Wenn add_another leer ist, setzte den Standardwert
+        add_another="${add_another:-Y}" # Set default value if add_another is empty
 
         if [ "$add_another" == "${add_another#[YyjJ]}" ]; then
             break
         fi
       done
 
-      # Überprüfe, ob das Array accounts nicht leer ist
+      # Check if the accounts array is not empty
       if [ ${#accounts[@]} -gt 0 ]; then
-          # Hole das letzte Element
+          # Get the last element
           last_element="${accounts[-1]}"
 
-          # Entferne das letzte Komma, falls vorhanden
+          # Remove the trailing comma if present
           last_element="${last_element%,}"
 
-          # Setze das aktualisierte letzte Element zurück
+          # Set back the updated last element
           accounts[-1]="$last_element"
       fi
 
-      # Erstelle die config.json-Datei  
+      # Create the config.json file  
       echo "{\"attachments\":$attachments,\"url\":\"$url\",\"passphrase\":\"$encrypted_password_hash\",\"accounts\":[${accounts[@]}]}" > "$config_file"
       log "config.json file created: $config_file"
   }
 
 
-    # Überprüfe, ob ein Konfigurationsdateiname angegeben wurde
+    # Check if a configuration file name is provided
     if [ -z "$config_file" ]; then
         echo "Error: No configuration file specified."
         show_help
         exit 1
     fi
 
-    # Überprüfe, ob die Konfigurationsdatei bereits existiert
+    # Check if the configuration file already exists
     if [ -e "$config_file" ]; then
         read -p "Configuration file already exists. Do you want to overwrite it? (y/N): " overwrite
         if [ "$overwrite" == "${overwrite#[YyjJ]}" ]; then
@@ -385,13 +383,13 @@ generate_command() {
         fi
     fi
 
-    # Rufe die Funktion zum Erstellen der Konfigurationsdatei auf
+    # Call the function to create the configuration file
     create_config_file
 }
 
 trap on_exit EXIT
 
-# Verarbeite die Kommandozeilenargumente
+# Process command line arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
     backup)
@@ -439,7 +437,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Überprüfe, ob ein Subcommand spezifiziert wurde
+# Check if a subcommand is specified
 if [[ -z "$subcommand" ]]; then
   echo "Error: No subcommand specified."
   echo
@@ -447,10 +445,10 @@ if [[ -z "$subcommand" ]]; then
   exit 1
 fi
 
-# Prüfen ob alle notwendigen Abhängigkeiten installiert sind
+# Check if all necessary dependencies are installed
 check_dependencies
 
-# Programmlogik ausführen je nach Subcommand
+# Execute program logic based on the subcommand
 case "$subcommand" in
   backup)
     backup_command
@@ -463,5 +461,5 @@ case "$subcommand" in
     exit 1
 esac
 
-#echo "Programm wurde erfolgreich ausgeführt"
+# echo "Program executed successfully"
 exit 0
