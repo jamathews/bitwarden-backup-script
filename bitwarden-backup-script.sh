@@ -27,18 +27,47 @@ show_help() {
   Bitwarden CLI backup helper
 
   Commands:
-    backup                    do a backup of the bitwarden instance
-    generate                  generates a config file
+    backup                       do a backup of the bitwarden instance
+    generate                     generates a config file
 
   Options:
-    -a --attachments          Adds attachments to the backup
-    -c --config <file>        Set the config file (default: config.json)
-    -o --output <file>        Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
-    -q --quiet                Suppress output
+    -a --attachments             Adds attachments to the backup
+    -c --config <file>           Set the config file (default: config.json)
+    -o --output <file>           Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
+    -q --quiet                   Suppress output
 
   Global Options:
-    -h --help                 Show this help message
+    -h --help                    Show this help message
 EOT
+}
+
+# Function to log text with different colors
+log() {
+    local type="${1}"   # Type of text (normal, warning, error, success), default is normal
+    shift
+    
+    # Check if quiet mode is activated
+    if [ "$quiet" = true ]; then
+        return 0  # Quiet mode activated, no output
+    else
+        case "$type" in
+            normal)
+                echo -e "$@"
+                ;;
+            warning)
+                echo -e "${YELLOW}Warning: $@${NC}"
+                ;;
+            error)
+                echo -e "${RED}Error: $@${NC}"
+                ;;
+            success)
+                echo -e "${GREEN}$@${NC}"
+                ;;
+            *)
+                echo -e "$@"
+                ;;
+        esac
+    fi
 }
 
 # Bitwarden Logout on exit if logged in
@@ -66,26 +95,26 @@ on_exit() {
 check_dependencies() {
   # Check if jq is installed
   if ! command -v jq &> /dev/null; then
-    echo -e "${RED}Error: jq is not installed. Please install jq to proceed.${NC}"
+    log error "jq is not installed. Please install jq to proceed."
     exit 1
   fi
 
   # Check if gpg is installed (optional)
   if command -v gpg &> /dev/null; then
-    log "${GREEN}GPG is installed. Encryption feature is available.${NC}"
+    log success "GPG is installed. Encryption feature is available."
   else
-    echo -e "${YELLOW}Warning: GPG is not installed. Encryption feature will be disabled.${NC}"
+    log warning "GPG is not installed. Encryption feature will be disabled."
   fi
 
   # Check if bw (Bitwarden CLI) is installed
   if ! command -v bw &> /dev/null; then
-    echo -e "${RED}Error: Bitwarden CLI (bw) is not installed. Please install bw to proceed.${NC}"
+    log error "Bitwarden CLI (bw) is not installed. Please install bw to proceed."
     exit 1
   fi
 
   # Check if openssl is installed
   if ! command -v openssl &> /dev/null; then
-    echo -e "${RED}Error: openssl is not installed. Please install openssl to proceed.${NC}"
+    log error "openssl is not installed. Please install openssl to proceed."
     exit 1
   fi
 }
@@ -96,18 +125,9 @@ check_password_match() {
   local pass2="$2"
 
   if [ "$pass1" != "$pass2" ]; then
-    echo "Error: Passwords do not match. Please try again."
+    log error "Passwords do not match. Please try again."
     exit 1
   fi
-}
-
-# Function replacing the echo command and making no output if required
-log() {
-    if [ "$quiet" = true ]; then
-        return 0  # Quiet mode activated, no output
-    else
-        echo -e "$@"
-    fi
 }
 
 debug_global_options() {
@@ -157,7 +177,7 @@ export_data() {
       log "Logged in on $server with $email."
     fi
   else
-    log "Login failed. Exiting."
+    log error "Login failed. Exiting."
     exit 1
   fi
 
@@ -200,13 +220,13 @@ backup_command() {
 
   # Check if the configuration file exists
   if [ ! -e "$config_file" ]; then
-    echo -e "${RED}Error: Configuration file not found: $config_file${NC}"
+    log error "Configuration file not found: $config_file"
     exit 1
   fi
 
   # Check if the JSON file is valid
   if ! jq empty < "$config_file" &> /dev/null; then
-    echo -e "${RED}Error: The JSON file '$config_file' is not valid.${NC}"
+    log error "The JSON file '$config_file' is not valid."
     exit 1
   fi
 
@@ -221,7 +241,7 @@ backup_command() {
   echo
 
   if [[ $(decrypt_password "$encryption_passphrase" "$passphrase") != "$passphrase" ]]; then
-      echo "Incorrect passphrase. Exiting."
+      log error "Incorrect passphrase. Exiting."
       exit 1
   fi
 
@@ -267,7 +287,7 @@ backup_command() {
 
     # Check if GPG is installed
     if ! command -v gpg &> /dev/null; then
-      echo "Error: GPG is not installed. Please install GPG to proceed."
+      log error "GPG is not installed. Please install GPG to proceed."
       exit 1
     fi
 
@@ -299,6 +319,12 @@ generate_command() {
       echo
       read -p "Confirm encryption passphrase: " -s confirm_passphrase
       echo
+
+      # Check if passphrase is empty
+      if [ -z "$passphrase" ]; then
+        log error "Passphrase cannot be empty."
+        exit 1
+      fi
 
       # Check if passwords match
       check_password_match "$encryption_passphrase" "$confirm_passphrase"
@@ -369,7 +395,7 @@ generate_command() {
 
     # Check if a configuration file name is provided
     if [ -z "$config_file" ]; then
-        echo "Error: No configuration file specified."
+        log error "No configuration file specified."
         show_help
         exit 1
     fi
@@ -409,7 +435,7 @@ while [[ $# -gt 0 ]]; do
         config_file="$2"
         shift 2
       else
-        echo "Error: Missing argument for $1"
+        log error "Missing argument for $1"
         exit 1
       fi
       ;;
@@ -418,7 +444,7 @@ while [[ $# -gt 0 ]]; do
         output_file="$2"
         shift 2
       else
-        echo "Error: Missing argument for $1"
+        log error "Missing argument for $1"
         exit 1
       fi
       ;;
@@ -431,7 +457,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "Error: Unknown option or argument: $1"
+      log error "Unknown option or argument: $1"
       exit 1
       ;;
   esac
@@ -439,7 +465,7 @@ done
 
 # Check if a subcommand is specified
 if [[ -z "$subcommand" ]]; then
-  echo "Error: No subcommand specified."
+  log error "No subcommand specified."
   echo
   show_help
   exit 1
