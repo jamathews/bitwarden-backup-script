@@ -16,7 +16,8 @@ temp_dir=".bw_backup"
 attachments=false
 config_file="config.json"
 output_file="bitwarden_backup_$(date +"%d_%m_%Y_%H_%M")"
-#passphrase='' # per default empty
+#passphrase
+#quiet
 
 # Function to display help
 show_help() {
@@ -76,13 +77,11 @@ log() {
 on_exit() {
     local exit_code=$?
 
-    bw login --check > /dev/null 2>&1
-    logged_in=$?
-
-    if test $logged_in -eq 0
-    then    
-        bw logout
-        log "Logged out from Bitwarden."
+    # Check if the user is logged in to Bitwarden
+    if bw login --check > /dev/null 2>&1; then
+      # User is logged in, perform logout
+      bw logout "${quiet:+--quiet}"
+      log "Logged out from Bitwarden."
     fi
 
     # Check if the temporary folder exists before deleting
@@ -133,13 +132,14 @@ check_password_match() {
 }
 
 debug_global_options() {
-  log "Executing export_data command"
-  log "Attachments option: $attachments"
-  log "Config file option: $config_file"
-  log "Ouput file option: $output_file"
-  log "Passphrase option: $passphrase"
-  log "-------------------------------"
-  log
+  echo "Debug global options:"
+  echo "Attachments option: $attachments"
+  echo "Config file option: $config_file"
+  echo "Ouput file option: $output_file"
+  echo "Passphrase option: $passphrase"
+  echo "Quiet option: $quiet"
+  echo "-------------------------------"
+  echo
 }
 
 # Function to encrypt a password and create the hash
@@ -166,14 +166,13 @@ export_data() {
   local password="$3"
   local organization_id="$4"
   local organization_name="$5"
-
   
   # Login to Bitwarden vault
-  key=$(bw login "$email" "$password" --raw )
+  key=$(bw login "$email" "$password" --raw)
   export BW_SESSION="$key"
 
   # Check if login is successful
-  if bw login --check  > /dev/null 2>&1; then
+  if bw login --check > /dev/null 2>&1; then
     if [ -n "$organization_id" ]; then
       log "Logged on $server with $email as Organization."
     else
@@ -192,8 +191,8 @@ export_data() {
   fi
 
   # Export the vault
-  bw export $password --output "$export_dir/bitwarden.json" --format json "${organization_id:+ --organizationid $organization_id}" 
-  bw export $password --output "$export_dir/bitwarden.csv" --format csv "${organization_id:+ --organizationid $organization_id}" 
+  bw export $password "${quiet:+--quiet}" --output "$export_dir/bitwarden.json" --format json "${organization_id:+--organizationid $organization_id}" 
+  bw export $password "${quiet:+--quiet}" --output "$export_dir/bitwarden.csv" --format csv "${organization_id:+--organizationid $organization_id}" 
 
   # Create directory for attachments export
   if [ "$attachments" = "true" ]; then
@@ -201,23 +200,20 @@ export_data() {
     mkdir -p "$export_dir/attachments"
 
     # Download attachments
-    bash <(bw list items --organizationid "${organization_id:-null}" | jq -r '.[] | select(.attachments != null) | . as $parent | .attachments[] | "bw get attachment \(.id) --itemid \($parent.id) --output \"'$export_dir'/attachments/\($parent.id)/\(.fileName)\""')
+    bash <(bw list items --organizationid "${organization_id:-null}" | jq -r '.[] | select(.attachments != null) | . as $parent | .attachments[] | "bw get attachment \(.id) '${quiet:+--quiet}' --itemid \($parent.id) --output \"'$export_dir'/attachments/\($parent.id)/\(.fileName)\""')
 
   fi
 
-  bw logout
+  bw logout "${quiet:+--quiet}"
 }
 
 # Function for the backup subcommand
 backup_command() {
 
   # Check if the user is logged in to Bitwarden
-  bw login --check > /dev/null 2>&1
-  logged_in=$?
-
-  if test $logged_in -eq 0; then
+  if bw login --check > /dev/null 2>&1; then
     # User is logged in, perform logout
-    bw logout
+    bw logout "${quiet:+--quiet}"
     log "Logged out from Bitwarden."
   fi
 
@@ -264,7 +260,7 @@ backup_command() {
   fi
 
   # Configure Bitwarden with the extracted server
-  bw config server "$bitwarden_server"
+  bw config server "$bitwarden_server" "${quiet:+--quiet}"
 
   # Loop over accounts and call export_data for each
   for account in "${accounts[@]}"; do
