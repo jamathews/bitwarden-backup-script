@@ -16,8 +16,11 @@ temp_dir=".bw_backup"
 attachments=false
 config_file="config.json"
 output_file="bitwarden_backup_$(date +"%d_%m_%Y_%H_%M")"
+non_interactive=false
+#gpg
 #passphrase
-#quiet
+#gpg_passphrase
+#quiet (default: false)
 
 # Function to display help
 show_help() {
@@ -29,18 +32,21 @@ show_help() {
   Bitwarden CLI backup helper
 
   Commands:
-    backup                       do a backup of the bitwarden instance
-    generate                     generates a config file
+    backup                           do a backup of the bitwarden instance
+    generate                         generates a config file
 
   Options:
-    -a --attachments             Adds attachments to the backup
-    -c --config <file>           Set the config file (default: config.json)
-    -o --output <file>           Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
-    -q --quiet                   Suppress output
-    -p --passphrase <passphrase> Set the passphrase for encryption/decryption of the config file (only recommended in secure environments)
+    -a --attachments                 Adds attachments to the backup
+    -c --config <file>               Set the config file (default: config.json)
+    -o --output <file>               Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
+    -q --quiet                       Suppress output
+    -p --passphrase <passphrase>     Set the passphrase for encryption/decryption of the config file (only recommended in secure environments)
+    -g --gpg                         Encrypt the backup using GPG (symmetric encryption)
+    -s --gpg-passphrase <passphrase> Set the passphrase for GPG encryption
+    -n --non-interactive             Run in non-interactive mode (useful for cron jobs)
 
   Global Options:
-    -h --help                    Show this help message
+    -h --help                        Show this help message
 EOT
 }
 
@@ -137,6 +143,9 @@ debug_global_options() {
   echo "Config file option: $config_file"
   echo "Ouput file option: $output_file"
   echo "Passphrase option: $passphrase"
+  echo "GPG passphrase option: $gpg_passphrase"
+  echo "GPG option: $gpg"
+  echo "Non interactive option: $non_interactive"
   echo "Quiet option: $quiet"
   echo "-------------------------------"
   echo
@@ -229,6 +238,32 @@ backup_command() {
     exit 1
   fi
 
+  # Check if non_interactive mode is enabled
+  if [ "$non_interactive" = true ]; then
+      # Log that non-interactive mode is enabled
+      log "Non-interactive mode is enabled."
+
+      # Check if passphrase is set
+      if [ -z "$passphrase" ]; then
+          # Log an error and exit
+          log error "Passphrase is required in non-interactive mode."
+          exit 1
+      fi
+
+      # Check if GPG is enabled
+      if [ "$gpg" = true ]; then
+          # Check if GPG passphrase is set
+          if [ -z "$gpg_passphrase" ]; then
+              # Log an error and exit
+              log error "GPG passphrase is required in non-interactive mode."
+              exit 1
+          fi
+      else
+        # Set gpg to false if not explicitly set to true
+        gpg=false
+      fi
+  fi
+
   # Read data from the configuration file
   attachments=$(jq -r '.attachments' "$config_file")
   encryption_passphrase=$(jq -r '.passphrase' "$config_file")
@@ -280,28 +315,48 @@ backup_command() {
     export_data "$bitwarden_server" "$email" "$password" "$organisation_id" "$organisation_name"
   done
 
+  # Ask user whether to encrypt the ZIP file with GPG if gpg is not set
+  if [ -z "$gpg" ]; then
+      read -p "Do you want to encrypt the ZIP file with GPG? (Y/n): " encrypt_with_gpg
 
-  # Ask user whether to encrypt the ZIP file with GPG
-  read -p "Do you want to encrypt the ZIP file with GPG? (Y/n): " encrypt_with_gpg
+      # Set default value for encryption to "Y" if no input is provided
+      encrypt_with_gpg="${encrypt_with_gpg:-Y}"
 
-  # Set default value for encryption to "Y" if no input is provided
-  encrypt_with_gpg="${encrypt_with_gpg:-Y}"
+      # Check if the input starts with "Y" or "y" (case-insensitive)
+      if [ "$encrypt_with_gpg" != "${encrypt_with_gpg#[YyjJ]}" ]; then
+          gpg=true
+      else
+          gpg=false
+      fi
+  fi
 
-  # Check if the input starts with "Y" or "y" (case-insensitive)
-  if [ "$encrypt_with_gpg" != "${encrypt_with_gpg#[YyjJ]}" ]; then
-
-    # Check if GPG is installed
-    if ! command -v gpg &> /dev/null; then
+  # Check if GPG is installed when gpg enabled
+  if [ "$gpg" = true ] && ! command -v gpg &> /dev/null; then
       log error "GPG is not installed. Please install GPG to proceed."
       exit 1
+  fi
+
+  # Check if gpg enabled
+  if [ "$gpg" = true ]; then
+    log "Encrypting the ZIP file with GPG..."
+
+    # Check if GPG passphrase is set
+    if [ -z "$gpg_passphrase" ]; then
+      # Encrypt the ZIP file using GPG without passphrase
+      tar cz "$temp_dir" | gpg --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
+    else
+      # Encrypt the ZIP file using GPG with passphrase in batch modus
+      tar cz "$temp_dir" | gpg --batch --passphrase "$gpg_passphrase" --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
     fi
 
-    log "Encrypting the ZIP file with GPG..."
-    tar cz "$temp_dir" | gpg --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
     log "Encryption completed. Encrypted file: $output_file.tar.gz.gpg"
   else
+    log warning "The output file is saved unencrypted because gpg is not enabled."
     log "Creating the ZIP archive..."
+
+    # Creating the ZIP archive without encryption
     tar czpf "$output_file.tar.gz" "$temp_dir"
+
     log "ZIP archive created. File: $output_file.tar.gz"
   fi
 
@@ -378,8 +433,8 @@ generate_command() {
         log "Account added."
 
         # Ask the user if they want to add another account
-        read -p "Do you want to add another account? (Y/n): " -r add_another
-        add_another="${add_another:-Y}" # Set default value if add_another is empty
+        read -p "Do you want to add another account? (y/N): " -r add_another
+        add_another="${add_another:-N}" # Set default value if add_another is empty
 
         if [ "$add_another" == "${add_another#[YyjJ]}" ]; then
             break
@@ -407,6 +462,12 @@ generate_command() {
     if [ -z "$config_file" ]; then
         log error "No configuration file specified."
         show_help
+        exit 1
+    fi
+
+    # Check if non_interactive mode is enabled
+    if [ "$non_interactive" = true ]; then
+        log error "The generate command cannot be used in non-interactive mode."
         exit 1
     fi
 
@@ -469,6 +530,23 @@ while [[ $# -gt 0 ]]; do
       ;;
     -q|--quiet)
       quiet=true
+      shift
+      ;;
+    -g|--gpg)
+      gpg=true
+      shift
+      ;;
+    -s|--gpg-passphrase)
+      if [[ -n "$2" ]]; then
+        gpg_passphrase="$2"
+        shift 2
+      else
+        log error "Missing argument for $1"
+        exit 1
+      fi
+      ;;
+    -n|--non-interactive)
+      non_interactive=true
       shift
       ;;
     -h|--help)
