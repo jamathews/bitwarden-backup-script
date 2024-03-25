@@ -34,17 +34,18 @@ This bash script provides an easy way to create and configure backups from a Bit
 ./bash-programm.sh <subcommand> <opts>
 
 Commands:
-  backup                    do a backup of the bitwarden instance
-  generate                  generates a config file
+  backup                       do a backup of the bitwarden instance
+  generate                     generates a config file
 
 Options:
-  -a --attachments          Adds attachments to the backup
-  -c --config <file>        Set the config file (default: config.json)
-  -o --output <file>        Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
-  -q --quiet                Suppress output
+  -a --attachments             Adds attachments to the backup
+  -c --config <file>           Set the config file (default: config.json)
+  -o --output <file>           Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
+  -q --quiet                   Suppress output
+  -p --passphrase <passphrase> Set the passphrase for encryption/decryption of the config file (only recommended in secure environments)
 
 Global Options:
-  -h --help                 Show this help message
+  -h --help                    Show this help message
 ```
 
 ## Tutorial

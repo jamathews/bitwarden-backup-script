@@ -16,6 +16,7 @@ temp_dir=".bw_backup"
 attachments=false
 config_file="config.json"
 output_file="bitwarden_backup_$(date +"%d_%m_%Y_%H_%M")"
+#passphrase='' # per default empty
 
 # Function to display help
 show_help() {
@@ -35,6 +36,7 @@ show_help() {
     -c --config <file>           Set the config file (default: config.json)
     -o --output <file>           Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
     -q --quiet                   Suppress output
+    -p --passphrase <passphrase> Set the passphrase for encryption/decryption of the config file (only recommended in secure environments)
 
   Global Options:
     -h --help                    Show this help message
@@ -52,7 +54,7 @@ log() {
     else
         case "$type" in
             normal)
-                echo -e "$@"
+                echo "$@"
                 ;;
             warning)
                 echo -e "${YELLOW}Warning: $@${NC}"
@@ -64,7 +66,7 @@ log() {
                 echo -e "${GREEN}$@${NC}"
                 ;;
             *)
-                echo -e "$@"
+                echo "$type $@"
                 ;;
         esac
     fi
@@ -135,6 +137,7 @@ debug_global_options() {
   log "Attachments option: $attachments"
   log "Config file option: $config_file"
   log "Ouput file option: $output_file"
+  log "Passphrase option: $passphrase"
   log "-------------------------------"
   log
 }
@@ -236,11 +239,17 @@ backup_command() {
   bitwarden_server=$(jq -r '.url' "$config_file")
   accounts=($(jq -c '.accounts[]' "$config_file"))
 
-  # Check if the encryption passphrase is correct
-  read -p "Enter decryption passphrase for backup: " -s passphrase
-  echo
+  # Check if passphrase is already set by flag
+  if [ -n "$passphrase" ]; then
+    log "Using pre-defined passphrase."
+    decryption_passphrase="$passphrase"
+  else
+    # Check if the encryption passphrase is correct
+    read -p "Enter decryption passphrase for backup: " -s decryption_passphrase
+    echo
+  fi
 
-  if [[ $(decrypt_password "$encryption_passphrase" "$passphrase") != "$passphrase" ]]; then
+  if [[ $(decrypt_password "$encryption_passphrase" "$decryption_passphrase") != "$decryption_passphrase" ]]; then
       log error "Incorrect passphrase. Exiting."
       exit 1
   fi
@@ -262,7 +271,7 @@ backup_command() {
     # Extract user data
     email=$(jq -r '.email' <<< "$account")
     password_hash=$(jq -r '.password' <<< "$account")
-    password=$(decrypt_password "$password_hash" "$passphrase")
+    password=$(decrypt_password "$password_hash" "$decryption_passphrase")
 
     # Check for organization
     if [ "$(jq -r '.organisation' <<< "$account")" == "true" ]; then
@@ -315,19 +324,25 @@ generate_command() {
       read -p "Enter Bitwarden URL (default: https://vault.bitwarden.com): " -r url
       url="${url:-https://vault.bitwarden.com}"   # Set default value if url is empty
 
-      read -p "Enter encryption passphrase for password encryption: " -s encryption_passphrase
-      echo
-      read -p "Confirm encryption passphrase: " -s confirm_passphrase
-      echo
+      # Check if passphrase is already set by flag
+      if [ -n "$passphrase" ]; then
+        log "Using pre-defined passphrase."
+        encryption_passphrase="$passphrase"
+      else
+        read -p "Enter encryption passphrase for password encryption: " -s encryption_passphrase
+        echo
+        read -p "Confirm encryption passphrase: " -s confirm_passphrase
+        echo
 
-      # Check if passphrase is empty
-      if [ -z "$passphrase" ]; then
-        log error "Passphrase cannot be empty."
-        exit 1
+        # Check if passphrase is empty
+        if [ -z "$encryption_passphrase" ]; then
+          log error "Passphrase cannot be empty."
+          exit 1
+        fi
+
+        # Check if passwords match
+        check_password_match "$encryption_passphrase" "$confirm_passphrase"
       fi
-
-      # Check if passwords match
-      check_password_match "$encryption_passphrase" "$confirm_passphrase"
 
       # Encryption and hashing of the password
       encrypted_password_hash=$(encrypt_password "$encryption_passphrase" "$encryption_passphrase")
@@ -392,7 +407,6 @@ generate_command() {
       log "config.json file created: $config_file"
   }
 
-
     # Check if a configuration file name is provided
     if [ -z "$config_file" ]; then
         log error "No configuration file specified."
@@ -448,6 +462,15 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       ;;
+    -p|--passphrase)
+      if [[ -n "$2" ]]; then
+        passphrase="$2"
+        shift 2
+      else
+        log error "Missing argument for $1"
+        exit 1
+      fi
+      ;;
     -q|--quiet)
       quiet=true
       shift
@@ -483,7 +506,7 @@ case "$subcommand" in
     generate_command
     ;;
   *)
-    echo "Error: Unknown subcommand: $subcommand"
+    log error "Unknown subcommand: $subcommand"
     exit 1
 esac
 
