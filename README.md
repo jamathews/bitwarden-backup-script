@@ -70,7 +70,7 @@ Global Options:
 ```bash
 5 4 * * * /opt/bitwarden-backup-script.sh backup -c /opt/myconfig.json -o "/opt/bw-backup-$(date +'\%d_\%m_\%Y_\%H_\%M')" -n --gpg --gpg-passphrase "YourPassphrase" -p "DecryptConfigPassword"
 ```
-_Note:_ To interpret the date expression $(date +'\%d_\%m_\%Y_\%H_\%M') correctly in a Crontab file, escape all percent signs (%) with a backslash (\). This prevents them from being interpreted as special characters.
+_Note:_ To interpret the date expression $(date +'\%d_\%m_\%Y_\%H_\%M') correctly in a Crontab file, escape all percent signs (%) with a backslash (\\). This prevents them from being interpreted as special characters.
 
 ### Decrypting and Extracting backup with GPG
 
