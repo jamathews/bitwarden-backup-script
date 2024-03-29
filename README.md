@@ -2,6 +2,16 @@
 
 This bash script provides an easy way to create and configure backups from a Bitwarden account. 
 
+## Features
+
+- add attachments to the export
+- export multiple accounts at once
+- direct encryption of the export with gpg (symmetric)
+- use of a config file to simplify repeated input of credentials (encrypted of course)
+- support for organizations
+- executable as cronjob
+- works without user interaction (if needed)
+
 ## Installation
 
 1. **Requirements:**
