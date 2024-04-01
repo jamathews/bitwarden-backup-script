@@ -44,18 +44,20 @@ This bash script provides an easy way to create and configure backups from a Bit
 ./bitwarden-backup-script.sh <subcommand> <opts>
 
 Commands:
-  backup                       do a backup of the bitwarden instance
-  generate                     generates a config file
+  backup                           do a backup of the bitwarden instance
+  generate                         generates a config file
+  extract                          extract and optionally decrypt the backup archive
 
 Options:
   -a --attachments                 Adds attachments to the backup
   -c --config <file>               Set the config file (default: config.json)
-  -o --output <file>               Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
+  -o --output <file|folder>        Set the output file or folder (default: bitwarden_backup_<timestamp>)
   -q --quiet                       Suppress output
   -p --passphrase <passphrase>     Set the passphrase for encryption/decryption of the config file (only recommended in secure environments)
   -g --gpg                         Encrypt the backup using GPG (symmetric encryption)
-  -s --gpg-passphrase <passphrase> Set the passphrase for GPG encryption
+  -s --gpg-passphrase <passphrase> Set the passphrase for GPG encryption/decryption
   -n --non-interactive             Run in non-interactive mode (useful for cron jobs)
+  -f --archive <file>              Set the archive file to extract
 
 Global Options:
   -h --help                        Show this help message
@@ -82,13 +84,27 @@ Global Options:
 ```
 _Note:_ To interpret the date expression $(date +'\%d_\%m_\%Y_\%H_\%M') correctly in a Crontab file, escape all percent signs (%) with a backslash (\\). This prevents them from being interpreted as special characters.
 
-### Decrypting and Extracting backup with GPG
+### Extracting a archive file
+
+```bash
+./bitwarden-backup-script extract --archive backup.tar.gz --output extracted_folder
+```
+
+### Extracting a archive file with GPG encryption
+
+```bash
+./bitwarden-backup-script extract --archive encrypted_backup.tar.gz.gpg --output extracted_folder --gpg --gpg-passphrase "DecryptPassword"
+```
+_Note:_ The script automatically tries to recognize by the file extension whether it is an archive encrypted with gpg, but you can override this with the `--gpg` option
+_Note:_ Set the `--gpg-passphrase` for sessions without gui, otherwise it will be asked interactively by gpg
+
+### Extracting a archive file without helper
 
 ```bash
 gpg --decrypt --output decrypted_backup.tar.gz encrypted_backup.tar.gz.gpg
-tar -xzf decrypted_backup.tar.gz
+mkdir -p path/to/output_folder
+tar xzf decrypted_backup.tar.gz -C path/to/output_folder
 ```
-_Note:_ By default, the extracted files will be placed in the current directory under `.bw_backup`. 
 
 ## Troubleshooting
 

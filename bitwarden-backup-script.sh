@@ -21,6 +21,7 @@ non_interactive=false
 #passphrase
 #gpg_passphrase
 #quiet (default: false)
+#archive
 
 # Function to display help
 show_help() {
@@ -34,16 +35,18 @@ show_help() {
   Commands:
     backup                           do a backup of the bitwarden instance
     generate                         generates a config file
+    extract                          extract and optionally decrypt the backup archive
 
   Options:
     -a --attachments                 Adds attachments to the backup
     -c --config <file>               Set the config file (default: config.json)
-    -o --output <file>               Set the output file (default: bitwarden_backup_<timestamp>.tar.gz)
+    -o --output <file|folder>        Set the output file or folder (default: bitwarden_backup_<timestamp>)
     -q --quiet                       Suppress output
     -p --passphrase <passphrase>     Set the passphrase for encryption/decryption of the config file (only recommended in secure environments)
     -g --gpg                         Encrypt the backup using GPG (symmetric encryption)
-    -s --gpg-passphrase <passphrase> Set the passphrase for GPG encryption
+    -s --gpg-passphrase <passphrase> Set the passphrase for GPG encryption/decryption
     -n --non-interactive             Run in non-interactive mode (useful for cron jobs)
+    -f --archive <file>              Set the archive file to extract
 
   Global Options:
     -h --help                        Show this help message
@@ -146,6 +149,7 @@ debug_global_options() {
   echo "GPG passphrase option: $gpg_passphrase"
   echo "GPG option: $gpg"
   echo "Non interactive option: $non_interactive"
+  echo "Archive option: $archive"
   echo "Quiet option: $quiet"
   echo "-------------------------------"
   echo
@@ -338,26 +342,26 @@ backup_command() {
 
   # Check if gpg enabled
   if [ "$gpg" = true ]; then
-    log "Encrypting the ZIP file with GPG..."
+    log "Encrypting the Archive file with GPG..."
 
     # Check if GPG passphrase is set
     if [ -z "$gpg_passphrase" ]; then
-      # Encrypt the ZIP file using GPG without passphrase
-      tar cz "$temp_dir" | gpg --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
+      # Encrypt the TAR file using GPG without passphrase
+      tar cz -C "$temp_dir" . | gpg --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
     else
-      # Encrypt the ZIP file using GPG with passphrase in batch modus
-      tar cz "$temp_dir" | gpg --batch --passphrase "$gpg_passphrase" --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
+      # Encrypt the TAR file using GPG with passphrase in batch modus
+      tar cz -C "$temp_dir" . | gpg --batch --passphrase "$gpg_passphrase" --symmetric --cipher-algo AES256 -o "$output_file.tar.gz.gpg"
     fi
 
     log "Encryption completed. Encrypted file: $output_file.tar.gz.gpg"
   else
     log warning "The output file is saved unencrypted because gpg is not enabled."
-    log "Creating the ZIP archive..."
+    log "Creating the TAR archive..."
 
-    # Creating the ZIP archive without encryption
-    tar czpf "$output_file.tar.gz" "$temp_dir"
+    # Creating the TAR archive without encryption
+    tar czpf "$output_file.tar.gz" -C "$temp_dir" .
 
-    log "ZIP archive created. File: $output_file.tar.gz"
+    log "TAR archive created. File: $output_file.tar.gz"
   fi
 
 }
@@ -370,7 +374,7 @@ generate_command() {
       log "Generating $config_file..."
 
       read -p "Add attachments to the backup? (true/false): " -r attachments
-      attachments="${attachments:-true}"  # Set default value if attachments is empty
+      attachments="${attachments:-false}"  # Set default value if attachments is empty
 
       read -p "Enter Bitwarden URL (default: https://vault.bitwarden.com): " -r url
       url="${url:-https://vault.bitwarden.com}"   # Set default value if url is empty
@@ -484,6 +488,85 @@ generate_command() {
     create_config_file
 }
 
+# Function for the extract subcommand
+extract_command() {
+
+    # Check if the 'archive' variable is set
+    if [ -z "$archive" ]; then
+        log error "The path to the archive is not specified."
+        exit 1
+    fi
+
+    # Check if the file specified by 'archive' exists
+    if [ ! -f "$archive" ]; then
+        # Log an error message and exit the script
+        log error "The specified archive file does not exist: $archive"
+        exit 1
+    fi
+
+    # Get the file extension of the archive
+    ext="${archive##*.}"
+
+    # Check if the file extension is .gpg or if the gpg option is set
+    if [ "$ext" == "gpg" ] || [ "$gpg" = true ]; then
+      gpg=true
+    fi
+
+    # Check if GPG is installed when gpg enabled
+    if [ "$gpg" = true ] && ! command -v gpg &> /dev/null; then
+        log error "GPG is not installed. Please install GPG to proceed."
+        exit 1
+    fi
+
+    # Check if non_interactive mode is enabled
+    if [ "$non_interactive" = true ]; then
+        # Log that non-interactive mode is enabled
+        log "Non-interactive mode is enabled."
+
+        # Check if GPG is enabled
+        if [ "$gpg" = true ]; then
+            # Check if GPG passphrase is set
+            if [ -z "$gpg_passphrase" ]; then
+                # Log an error and exit
+                log error "GPG passphrase is required in non-interactive mode."
+                exit 1
+            fi
+        fi
+    fi
+
+
+    # Check if gpg enabled
+    if [ "$gpg" = true ]; then
+      log "Decrypting the GPG encrypted TAR file..."
+
+      # Check if GPG passphrase is set
+      if [ -z "$gpg_passphrase" ]; then
+        # Decrypt the GPG encrypted TAR file without passphrase
+        gpg --decrypt --output "$output_file.tar.gz" "$archive"
+      else
+        # Decrypt the GPG encrypted TAR file with passphrase in batch mode
+        gpg --batch --passphrase $gpg_passphrase --decrypt --output "$output_file.tar.gz" "$archive"
+      fi
+
+      log "Decryption completed. Decrypted file: $output_file.tar.gz"
+    fi
+
+    # Check if the output directory exists, if not create it
+    if [ ! -d "$output_file" ]; then
+      mkdir -p "$output_file"
+    fi
+
+
+    log "Extracting the TAR archive..."
+    tar xzf "$output_file.tar.gz" -C "$output_file"
+
+    # Remove the temporary TAR.GZ file
+    rm "$output_file.tar.gz"
+
+    log "Extraction completed. Files are extracted to: $output_file"
+
+}
+
 trap on_exit EXIT
 
 # Process command line arguments
@@ -495,6 +578,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     generate)
       subcommand="generate"
+      shift
+      ;;
+    extract)
+      subcommand="extract"
       shift
       ;;
     -a|--attachments)
@@ -522,6 +609,15 @@ while [[ $# -gt 0 ]]; do
     -p|--passphrase)
       if [[ -n "$2" ]]; then
         passphrase="$2"
+        shift 2
+      else
+        log error "Missing argument for $1"
+        exit 1
+      fi
+      ;;
+    -f|--archive)
+      if [[ -n "$2" ]]; then
+        archive="$2"
         shift 2
       else
         log error "Missing argument for $1"
@@ -578,6 +674,9 @@ case "$subcommand" in
     ;;
   generate)
     generate_command
+    ;;
+  extract)
+    extract_command
     ;;
   *)
     log error "Unknown subcommand: $subcommand"
