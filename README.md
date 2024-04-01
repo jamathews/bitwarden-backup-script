@@ -84,23 +84,23 @@ Global Options:
 ```
 _Note:_ To interpret the date expression $(date +'\%d_\%m_\%Y_\%H_\%M') correctly in a Crontab file, escape all percent signs (%) with a backslash (\\). This prevents them from being interpreted as special characters.
 
-### Extracting a archive file
+### Extract archive file
 
 ```bash
 ./bitwarden-backup-script extract --archive backup.tar.gz --output extracted_folder
 ```
 
-### Extracting a archive file with GPG encryption
+### Extract archive file with GPG encryption
 
 ```bash
 ./bitwarden-backup-script extract --archive encrypted_backup.tar.gz.gpg --output extracted_folder --gpg --gpg-passphrase "DecryptPassword"
 ```
 _Note:_ The script automatically tries to recognize by the file extension whether it is an archive encrypted with gpg, but you can override this with the `--gpg` option. Set the `--gpg-passphrase` for sessions without gui, otherwise it will be asked interactively by gpg
 
-### Extracting a archive file without helper
+### Extract archive file without helper
 
 ```bash
-gpg --decrypt --output decrypted_backup.tar.gz encrypted_backup.tar.gz.gpg
+gpg --decrypt --output decrypted_backup.tar.gz encrypted_backup.tar.gz.gpg # if archive is encrypted
 mkdir -p path/to/output_folder
 tar xzf decrypted_backup.tar.gz -C path/to/output_folder
 ```
