@@ -95,8 +95,7 @@ _Note:_ To interpret the date expression $(date +'\%d_\%m_\%Y_\%H_\%M') correctl
 ```bash
 ./bitwarden-backup-script extract --archive encrypted_backup.tar.gz.gpg --output extracted_folder --gpg --gpg-passphrase "DecryptPassword"
 ```
-_Note:_ The script automatically tries to recognize by the file extension whether it is an archive encrypted with gpg, but you can override this with the `--gpg` option
-_Note:_ Set the `--gpg-passphrase` for sessions without gui, otherwise it will be asked interactively by gpg
+_Note:_ The script automatically tries to recognize by the file extension whether it is an archive encrypted with gpg, but you can override this with the `--gpg` option. Set the `--gpg-passphrase` for sessions without gui, otherwise it will be asked interactively by gpg
 
 ### Extracting a archive file without helper
 
