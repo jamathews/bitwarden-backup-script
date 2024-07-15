@@ -1,3 +1,5 @@
+Original Repository: https://gitlab.com/silkeackermann/bitwarden-backup-script
+
 # Bitwarden CLI Backup Helper
 
 This bash script provides an easy way to create and configure backups from a Bitwarden account. 
